@@ -1,0 +1,11 @@
+librosa>=1.0
+scikit-learn>=1.5
+soundfile>=0.12
+matplotlib>=3.8
+pandas>=2.2
+numpy>=1.26
+joblib>=1.4
+imageio-ffmpeg>=0.5
+jupyter
+ipykernel
+nbformat

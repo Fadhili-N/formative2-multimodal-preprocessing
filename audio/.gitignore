@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+models/_tmp.wav
+# regenerable with: python audio_pipeline.py
+augmented/

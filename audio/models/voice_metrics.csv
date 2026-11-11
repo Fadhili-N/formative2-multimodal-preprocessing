@@ -1,0 +1,3 @@
+model,accuracy,f1_macro,log_loss
+LogisticRegression,0.875,0.867,0.467
+RandomForest,0.75,0.65,1.049
