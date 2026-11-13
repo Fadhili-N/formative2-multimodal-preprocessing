@@ -1,0 +1,23 @@
+# Shared environment for the CLI and all notebooks
+
+# core
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
+joblib>=1.4
+matplotlib>=3.8
+seaborn>=0.13
+scipy>=1.11
+
+# face (needs cv2.FaceDetectorYN and cv2.FaceRecognizerSF)
+opencv-python>=4.8
+
+# audio
+librosa>=0.10
+soundfile>=0.12
+imageio-ffmpeg>=0.5
+
+# notebooks
+jupyter
+ipykernel
+nbformat
