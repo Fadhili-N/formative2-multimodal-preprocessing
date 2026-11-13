@@ -62,7 +62,10 @@ formative2-multimodal-preprocessing/
 │   ├── customer_social_profiles.csv
 │   ├── customer_transactions.csv
 │   ├── merged_dataset.csv           # cleaned, merged, feature-engineered
-│   ├── product_model.py
+│   ├── product_model.py             # clean → merge → features → train / predict
+│   ├── product_recommendation_model.joblib
+│   ├── product_metrics.json
+│   ├── product_confusion_matrix.png
 │   └── Armstrong_product_model_notebook.ipynb
 │
 ├── face/                            # Facial images + facial recognition model
@@ -126,13 +129,15 @@ formative2-multimodal-preprocessing/
 |---|---|---|---|---|---|
 | Facial recognition | Logistic Regression on SFace embeddings + similarity threshold | Leave-one-expression-out | 1.000 | 1.000 | 0.223 |
 | Voiceprint verification | Logistic Regression on MFCC/spectral features + confidence threshold | Leave-one-recording-out | 0.875 | 0.867 | 0.467 |
-| Product recommendation | Random Forest (300 trees, class-balanced) | Customer-grouped 75/25 split | 0.200 | 0.190 | pending retrain |
+| Product recommendation | Random Forest (300 trees, min 10 samples per leaf, class-balanced) | 5-fold cross-validation grouped by customer | 0.200 | 0.191 | 1.655 |
+
+**Product model in context.** With five near-balanced classes, random guessing gives 0.20 accuracy and a log-loss of 1.609. The product model performs at that level. This matches the EDA, which found no feature significantly associated with `product_category`; the limit comes from the data, not the algorithm. Logistic Regression (accuracy 0.187, log-loss 1.653) was also compared. Both models are strongly regularised so their probabilities stay realistic instead of overconfident.
 
 **Preventing leakage.** In every evaluation, all augmented copies of a test sample stay on the test side, and for the product model all transactions of a test customer stay on the test side. Scores therefore reflect performance on unseen inputs, not near-duplicates of training samples.
 
 **Rejecting strangers.** Each biometric model has an acceptance threshold tuned on impostor trials. In those trials each member is left out of training and treated as a stranger, and the voice model also uses non-member recordings.
 - Face: threshold 0.41 cosine similarity; 100% of genuine faces accepted and 100% of strangers rejected.
-- Voice: confidence threshold stored in `voice_model.joblib`.
+- Voice: confidence threshold 0.76, tuned on members left out of training and four non-member voices.
 
 ---
 
@@ -183,7 +188,7 @@ python main.py --demo
 python face/face_model.py train
 python audio/audio_pipeline.py        # regenerates augmented audio + audio_features.csv
 python audio/voice_model.py train
-python armstrong_product_model/product_model.py
+python armstrong_product_model/product_model.py train   # rebuilds merged_dataset.csv, evaluates, saves the model
 ```
 
 ---
