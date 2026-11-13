@@ -53,14 +53,22 @@ MEMBER_CUSTOMERS = {
 }
 
 DEMO_SCENARIOS = [
-    ("Full transaction (authorised user)",
-     "face/diane/diane_neutral.jpeg", "audio/converted/diane_yes_approve.wav"),
-    ("Unauthorized face",
-     "face/test_images/unauthorized_unreadable_face.jpg", "audio/converted/diane_yes_approve.wav"),
-    ("Unauthorized voice",
-     "face/diane/diane_neutral.jpeg", "audio/unauthorized/stranger_tts1.wav"),
+    ("Full transaction: Armstrong",
+     "face/armstrong/armstrong_neutral.jpeg", "audio/converted/armstrong_yes_approve.wav"),
+    ("Full transaction: Ayomide",
+     "face/ayoo/ayoo_happy.jpg", "audio/converted/ayomide_confirm_transaction.wav"),
+    ("Full transaction: Diane",
+     "face/diane/diane_surprised.jpeg", "audio/converted/diane_yes_approve.wav"),
+    ("Full transaction: Fadhili",
+     "face/fadhili/fadhili_neutral.jpeg", "audio/converted/fadhili_confirm_transaction.wav"),
+    ("Unauthorized face (stranger)",
+     "face/test_images/smiling_test1.jpg", "audio/converted/diane_yes_approve.wav"),
+    ("Unauthorized face (no face in image)",
+     "face/test_images/unauthorized_no_face.jpg", "audio/converted/diane_yes_approve.wav"),
+    ("Unauthorized voice (stranger)",
+     "face/armstrong/armstrong_neutral.jpeg", "audio/unauthorized/stranger_tts2.wav"),
     ("Face and voice from different members",
-     "face/diane/diane_neutral.jpeg", "audio/converted/fadhili_yes_approve.wav"),
+     "face/ayoo/ayoo_neutral.jpeg", "audio/converted/fadhili_yes_approve.wav"),
 ]
 
 

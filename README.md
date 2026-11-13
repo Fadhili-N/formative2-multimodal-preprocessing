@@ -176,10 +176,13 @@ python main.py --demo
 
 | Scenario | Face input | Voice input | Outcome |
 |---|---|---|---|
-| Full transaction | `face/diane/diane_neutral.jpeg` | `audio/converted/diane_yes_approve.wav` | Product recommendation displayed |
-| Unauthorized face | `face/test_images/unauthorized_unreadable_face.jpg` | – | Denied at the face step |
-| Unauthorized voice | `face/diane/diane_neutral.jpeg` | `audio/unauthorized/stranger_tts1.wav` | Denied at the voice step |
-| Face/voice mismatch | `face/diane/diane_neutral.jpeg` | `audio/converted/fadhili_yes_approve.wav` | Denied, speaker does not match face |
+| Full transaction (each member) | `face/<member>/<member>_<expression>.jpeg` | `audio/converted/<member>_<phrase>.wav` | Product recommendation displayed |
+| Unauthorized face: stranger | `face/test_images/smiling_test1.jpg` | – | Denied at the face step (similarity 0.28 < 0.41) |
+| Unauthorized face: no face | `face/test_images/unauthorized_no_face.jpg` | – | Denied at the face step |
+| Unauthorized voice | `face/armstrong/armstrong_neutral.jpeg` | `audio/unauthorized/stranger_tts2.wav` | Denied at the voice step |
+| Face/voice mismatch | `face/ayoo/ayoo_neutral.jpeg` | `audio/converted/fadhili_yes_approve.wav` | Denied, speaker does not match face |
+
+`--demo` runs a full transaction for every member and all four denial cases. In a wider check of 55 combinations (every member × 3 expressions × 2 phrases, every face/voice mismatch, 4 stranger voices against every member, and 3 unknown face images), every transaction was approved or denied as expected.
 
 **Member-to-customer link.** The team members are not real customers in the dataset, so each member is linked to one real customer profile (`MEMBER_CUSTOMERS` in `main.py`): Armstrong → 187, Ayomide → 114, Fadhili → 101, Diane → 188. These are customers present in both source datasets with the longest purchase histories.
 
