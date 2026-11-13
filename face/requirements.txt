@@ -1,0 +1,7 @@
+opencv-python>=4.8   # needs cv2.FaceDetectorYN and cv2.FaceRecognizerSF
+numpy
+pandas
+scikit-learn
+joblib
+matplotlib
+jupyter
