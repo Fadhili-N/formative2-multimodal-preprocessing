@@ -54,6 +54,10 @@ formative2-multimodal-preprocessing/
 ├── requirements.txt                 # shared environment
 ├── README.md
 │
+├── notebooks/
+│   ├── eda_merged_dataset.ipynb     # EDA on the merged dataset
+│   └── plots/                       # EDA figures (used in the report)
+│
 ├── armstrong_product_model/         # Tabular data + product recommendation model
 │   ├── customer_social_profiles.csv
 │   ├── customer_transactions.csv
@@ -94,6 +98,13 @@ formative2-multimodal-preprocessing/
 - **Key alignment:** `customer_id_legacy` (e.g. `151`) and `customer_id_new` (e.g. `A151`) were unified into one numeric `customer_id`. 61 customers appear in both sources.
 - **Join:** social profiles were first aggregated to one row per customer, so the merge cannot duplicate transactions. They were then **left-joined** onto transactions, which keeps every transaction because each one carries the target label `product_category`.
 - **Engineered features:** number of prior purchases, average prior purchase amount and average prior rating (computed only from earlier transactions, so no future information leaks in), number of social platforms, most common platform, average engagement, average purchase interest, dominant review sentiment, and engagement level.
+
+### Exploratory data analysis (`notebooks/eda_merged_dataset.ipynb`)
+- **Covers:** variable types, summary statistics, missing values, duplicates, distributions, outliers (IQR rule), a correlation matrix, feature–target association tests (Kruskal–Wallis, χ²) and the monthly purchase trend.
+- **Data quality:** missing values are structural. 50% of rows are first purchases with no history, and 22% belong to 14 customers without a social profile. There are no duplicates, so the merge did not multiply transactions. Two columns are exact copies of others (`social_media_platform_nunique`, `customer_id_legacy`).
+- **Distributions and outliers:** numeric features are close to symmetric, and only 4 low purchase-interest values fall outside the IQR fences. These are valid values and are kept.
+- **Correlations and target:** every correlation is weak (|r| < 0.3), so there is no multicollinearity. The target classes are nearly balanced (17–23% each).
+- **Main finding:** no feature is significantly associated with `product_category` (all p > 0.05). This explains why the product model performs close to the 20% chance level.
 
 ### Facial images (`face/`)
 - **Data:** 4 members × 3 expressions (neutral, happy, surprised).
