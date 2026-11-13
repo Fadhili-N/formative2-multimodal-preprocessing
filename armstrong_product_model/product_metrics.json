@@ -1,0 +1,65 @@
+{
+  "evaluation": "5-fold GroupKFold by customer (150 transactions, 75 customers)",
+  "chance_accuracy": 0.2,
+  "chance_log_loss": 1.609,
+  "selected_model": "RandomForest",
+  "models": {
+    "LogisticRegression": {
+      "accuracy": 0.187,
+      "f1_macro": 0.17,
+      "f1_weighted": 0.173,
+      "log_loss": 1.653
+    },
+    "RandomForest": {
+      "accuracy": 0.2,
+      "f1_macro": 0.191,
+      "f1_weighted": 0.19,
+      "log_loss": 1.655
+    }
+  },
+  "classification_report": {
+    "Books": {
+      "precision": 0.2,
+      "recall": 0.24,
+      "f1-score": 0.21818181818181817,
+      "support": 25.0
+    },
+    "Clothing": {
+      "precision": 0.13333333333333333,
+      "recall": 0.14285714285714285,
+      "f1-score": 0.13793103448275862,
+      "support": 28.0
+    },
+    "Electronics": {
+      "precision": 0.2857142857142857,
+      "recall": 0.29411764705882354,
+      "f1-score": 0.2898550724637681,
+      "support": 34.0
+    },
+    "Groceries": {
+      "precision": 0.18604651162790697,
+      "recall": 0.2857142857142857,
+      "f1-score": 0.22535211267605634,
+      "support": 28.0
+    },
+    "Sports": {
+      "precision": 0.16666666666666666,
+      "recall": 0.05714285714285714,
+      "f1-score": 0.0851063829787234,
+      "support": 35.0
+    },
+    "accuracy": 0.2,
+    "macro avg": {
+      "precision": 0.19435215946843853,
+      "recall": 0.20396638655462182,
+      "f1-score": 0.19128528415662496,
+      "support": 150.0
+    },
+    "weighted avg": {
+      "precision": 0.19660169804355854,
+      "recall": 0.2,
+      "f1-score": 0.18973512962010475,
+      "support": 150.0
+    }
+  }
+}

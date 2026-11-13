@@ -1,545 +1,265 @@
-import pandas as pd
-import numpy as np
+"""Product recommendation model (step 2 of the authentication system).
+
+Steps:
+    1. Clean customer_transactions.csv and customer_social_profiles.csv
+    2. Align the two customer IDs (151 and A151 -> 151)
+    3. Aggregate social profiles to one row per customer, then left-join onto transactions
+    4. Engineer purchase-history features (only from purchases made BEFORE each transaction)
+    5. Compare Logistic Regression and Random Forest with customer-grouped cross-validation
+    6. Save merged_dataset.csv, the trained model, metrics and a confusion matrix
+
+Usage:
+    python product_model.py train            # rebuild the data, evaluate, save the model
+    python product_model.py predict 188      # recommended product for a customer
+
+The CLI (main.py) calls predict(customer_id).
+"""
+import json
+import sys
+import warnings
 from pathlib import Path
-from sklearn.model_selection import GroupShuffleSplit
+
+import joblib
+import numpy as np
+import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (accuracy_score, classification_report, confusion_matrix, f1_score,
+                             log_loss)
+from sklearn.model_selection import GroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.impute import SimpleImputer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    log_loss,
-    confusion_matrix,
-    classification_report
-)
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import joblib
-import os
-
-# Load customer transactions
-transactions = pd.read_csv(Path(__file__).with_name("customer_transactions.csv"))
-
-# Load customer social profiles
-social_profiles = pd.read_csv(Path(__file__).with_name("customer_social_profiles.csv"))
-
-# Display first five rows
-print("TRANSACTIONS")
-print(transactions.head())
-
-print("\nSOCIAL PROFILES")
-print(social_profiles.head())
-
-# Check dataset dimensions
-print("Transactions shape:", transactions.shape)
-print("Social profiles shape:", social_profiles.shape)
-
-# Check column names and data types
-print("\nTRANSACTIONS INFO")
-transactions.info()
-
-print("\nSOCIAL PROFILES INFO")
-social_profiles.info()
-
-# Statistical summary
-print("\nTRANSACTIONS SUMMARY")
-print(transactions.describe())
-
-print("\nSOCIAL PROFILES SUMMARY")
-print(social_profiles.describe())
-
-print("Missing values in transactions:")
-print(transactions.isnull().sum())
-
-print("\nMissing values in social profiles:")
-print(social_profiles.isnull().sum())
-
-print("Transaction duplicates:", transactions.duplicated().sum())
-print("Social duplicates:", social_profiles.duplicated().sum())
-
-# Remove exact duplicate rows
-transactions = transactions.drop_duplicates()
-social_profiles = social_profiles.drop_duplicates()
-
-# Convert purchase date to datetime
-transactions["purchase_date"] = pd.to_datetime(
-    transactions["purchase_date"],
-    errors="coerce"
-)
-
-# Convert purchase amount to numeric
-transactions["purchase_amount"] = pd.to_numeric(
-    transactions["purchase_amount"],
-    errors="coerce"
-)
-
-# Convert customer rating to numeric
-transactions["customer_rating"] = pd.to_numeric(
-    transactions["customer_rating"],
-    errors="coerce"
-)
-
-# Convert social scores to numeric
-social_profiles["engagement_score"] = pd.to_numeric(
-    social_profiles["engagement_score"],
-    errors="coerce"
-)
-
-social_profiles["purchase_interest_score"] = pd.to_numeric(
-    social_profiles["purchase_interest_score"],
-    errors="coerce"
-)
-
-# Fill missing purchase amounts with median
-transactions["purchase_amount"] = transactions[
-    "purchase_amount"
-].fillna(transactions["purchase_amount"].median())
-
-# Fill missing ratings with median
-transactions["customer_rating"] = transactions[
-    "customer_rating"
-].fillna(transactions["customer_rating"].median())
-
-print(transactions.isnull().sum())
-
-print(social_profiles.isnull().sum())
-
-print(transactions.dtypes)
-
-# Convert transaction customer IDs to numeric
-transactions["customer_id"] = pd.to_numeric(
-    transactions["customer_id_legacy"],
-    errors="coerce"
-)
-
-# Remove the A prefix from social customer IDs
-social_profiles["customer_id"] = pd.to_numeric(
-    social_profiles["customer_id_new"].str.replace("A", "", regex=False),
-    errors="coerce"
-)
-
-print("Transaction IDs:")
-print(transactions["customer_id"].head())
-
-print("\nSocial profile IDs:")
-print(social_profiles["customer_id"].head())
-
-transaction_customers = set(transactions["customer_id"].dropna())
-
-social_customers = set(social_profiles["customer_id"].dropna())
-
-# Customers appearing in both datasets
-common_customers = transaction_customers.intersection(
-    social_customers
-)
-
-print("Customers in transactions:", len(transaction_customers))
-
-print("Customers in social profiles:", len(social_customers))
-
-print("Matching customers:", len(common_customers))
-
-# Create a function to get the most common value
-def most_common_value(series):
-    return series.mode().iloc[0] if not series.mode().empty else "Unknown"
-
-
-# Aggregate social profiles by customer
-social_aggregated = social_profiles.groupby("customer_id").agg({
-
-    "social_media_platform": ["nunique", most_common_value],
-
-    "engagement_score": "mean",
-
-    "purchase_interest_score": "mean",
-
-    "review_sentiment": most_common_value
-
-}).reset_index()
-
-social_aggregated.columns = [
-    "_".join(col).strip("_") if isinstance(col, tuple) else col
-    for col in social_aggregated.columns
-]
-
-print(social_aggregated.head())
-
-merged_dataset = pd.merge(
-
-    transactions,
-
-    social_aggregated,
-
-    on="customer_id",
-
-    how="left"
-
-)
-
-# Count the number of social media platforms per customer
-
-platform_count = social_profiles.groupby("customer_id")[
-    "social_media_platform"
-].nunique()
-
-# Add platform count to aggregated social profiles
-
-social_aggregated["social_platform_count"] = (
-    social_aggregated["customer_id"].map(platform_count)
-)
-
-# Check dimensions
-print("Original transactions:", transactions.shape)
-
-print("Merged dataset:", merged_dataset.shape)
-
-
-# Check duplicate transaction IDs
-print(
-    "Duplicate transactions:",
-    merged_dataset["transaction_id"].duplicated().sum()
-)
-
-
-# Check missing values
-print("\nMissing values:")
-print(merged_dataset.isnull().sum())
-
-
-# Display merged dataset
-print("\nMerged dataset:")
-print(merged_dataset.head())
-
-merged_dataset.to_csv("merged_dataset.csv", index=False)
-
-print("Merged dataset successfully saved!")
-
-def classify_engagement(score):
-
-    if pd.isna(score):
-        return "Unknown"
-
-    elif score >= 70:
-        return "High"
-
-    elif score >= 40:
-        return "Medium"
-
-    else:
-        return "Low"
-
-
-social_aggregated["engagement_level"] = (
-    social_aggregated["engagement_score_mean"].apply(classify_engagement)
-)
-
-# Sort transactions by customer and date
-
-transactions = transactions.sort_values(
-    ["customer_id", "purchase_date"]
-).copy()
-
-
-# Number of previous purchases
-
-transactions["prior_purchase_count"] = (
-    transactions.groupby("customer_id").cumcount()
-)
-
-
-# Average amount spent on previous purchases
-
-transactions["prior_avg_purchase_amount"] = (
-    transactions.groupby("customer_id")["purchase_amount"]
-    .transform(
-        lambda x: x.shift(1).expanding().mean()
-    )
-)
-
-
-# Average rating from previous purchases
-
-transactions["prior_avg_customer_rating"] = (
-    transactions.groupby("customer_id")["customer_rating"]
-    .transform(
-        lambda x: x.shift(1).expanding().mean()
-    )
-)
-
-# Merge transaction features with social features
-
-merged_dataset = pd.merge(
-    transactions,
-    social_aggregated,
-    on="customer_id",
-    how="left"
-)
-
-print(merged_dataset.columns.tolist())
-
-merged_dataset.to_csv(
-    "merged_dataset.csv",
-    index=False
-)
-
-print("Feature engineering completed!")
-
-
-# Features used for prediction
-numeric_features = [
-    "engagement_score",
-    "purchase_interest_score",
+warnings.filterwarnings("ignore")
+
+ROOT = Path(__file__).resolve().parent
+TRANSACTIONS_FILE = ROOT / "customer_transactions.csv"
+SOCIAL_FILE = ROOT / "customer_social_profiles.csv"
+MERGED_FILE = ROOT / "merged_dataset.csv"
+MODEL_FILE = ROOT / "product_recommendation_model.joblib"
+METRICS_FILE = ROOT / "product_metrics.json"
+CONFUSION_FILE = ROOT / "product_confusion_matrix.png"
+
+TARGET = "product_category"
+NUMERIC_FEATURES = [
+    "engagement_score_mean",
+    "purchase_interest_score_mean",
     "social_platform_count",
     "prior_purchase_count",
     "prior_avg_purchase_amount",
-    "prior_avg_customer_rating"
+    "prior_avg_customer_rating",
 ]
-
-categorical_features = [
-    "social_media_platform",
-    "review_sentiment"
+CATEGORICAL_FEATURES = [
+    "social_media_platform_most_common_value",
+    "review_sentiment_most_common_value",
 ]
-
-feature_columns = numeric_features + categorical_features
-
-X = merged_dataset[feature_columns]
-
-# Target variable
-y = merged_dataset["product_category"]
-
-# Remove rows without a target
-model_data = merged_dataset.dropna(
-    subset=["product_category"]
-).copy()
-
-X = model_data[feature_columns]
-y = model_data["product_category"].astype(str)
-
-groups = model_data["customer_id"]
-
-splitter = GroupShuffleSplit(
-    n_splits=1,
-    test_size=0.25,
-    random_state=42
-)
-
-train_index, test_index = next(
-    splitter.split(X, y, groups)
-)
-
-X_train = X.iloc[train_index]
-X_test = X.iloc[test_index]
-
-y_train = y.iloc[train_index]
-y_test = y.iloc[test_index]
-
-print("Training rows:", len(X_train))
-print("Testing rows:", len(X_test))
-
-# Numerical preprocessing
-numeric_transformer = Pipeline(steps=[
-    ("imputer", SimpleImputer(strategy="median")),
-    ("scaler", StandardScaler())
-])
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+N_FOLDS = 5
+SEED = 42
 
 
-# Categorical preprocessing
-categorical_transformer = Pipeline(steps=[
-    ("imputer", SimpleImputer(strategy="most_frequent")),
-    ("encoder", OneHotEncoder(handle_unknown="ignore"))
-])
+# 1. Cleaning
+def load_clean():
+    """Return the cleaned transactions and social profiles, each with a numeric customer_id."""
+    transactions = pd.read_csv(TRANSACTIONS_FILE).drop_duplicates()
+    social = pd.read_csv(SOCIAL_FILE).drop_duplicates()
+
+    transactions["purchase_date"] = pd.to_datetime(transactions["purchase_date"], errors="coerce")
+    for col in ["purchase_amount", "customer_rating"]:
+        transactions[col] = pd.to_numeric(transactions[col], errors="coerce")
+        transactions[col] = transactions[col].fillna(transactions[col].median())
+    for col in ["engagement_score", "purchase_interest_score"]:
+        social[col] = pd.to_numeric(social[col], errors="coerce")
+
+    # 2. Align the IDs: transactions use 151, social profiles use A151
+    transactions["customer_id"] = pd.to_numeric(transactions["customer_id_legacy"], errors="coerce")
+    social["customer_id"] = pd.to_numeric(
+        social["customer_id_new"].astype(str).str.replace("A", "", regex=False), errors="coerce")
+    return transactions, social
 
 
-# Combine preprocessing
-preprocessor = ColumnTransformer(
-    transformers=[
-        ("num", numeric_transformer, numeric_features),
-        ("cat", categorical_transformer, categorical_features)
-    ]
-)
+def most_common_value(series):
+    mode = series.mode()
+    return mode.iloc[0] if not mode.empty else "Unknown"
 
-model = Pipeline(steps=[
-    ("preprocessing", preprocessor),
 
-    ("classifier", RandomForestClassifier(
-        n_estimators=300,
-        random_state=42,
-        class_weight="balanced",
-        min_samples_leaf=2
-    ))
-])
+def classify_engagement(score):
+    if pd.isna(score):
+        return "Unknown"
+    if score >= 70:
+        return "High"
+    if score >= 40:
+        return "Medium"
+    return "Low"
 
-model.fit(X_train, y_train)
 
-print("Model training completed!")
+# 3. Aggregate + merge
+def aggregate_social(social):
+    """One row per customer, so the join cannot duplicate transactions."""
+    agg = social.groupby("customer_id").agg({
+        "social_media_platform": ["nunique", most_common_value],
+        "engagement_score": "mean",
+        "purchase_interest_score": "mean",
+        "review_sentiment": most_common_value,
+    }).reset_index()
+    agg.columns = ["_".join(c).strip("_") for c in agg.columns]
+    agg["social_platform_count"] = agg["social_media_platform_nunique"]
+    agg["engagement_level"] = agg["engagement_score_mean"].apply(classify_engagement)
+    return agg
 
-predictions = model.predict(X_test)
 
-print("Actual products:")
-print(y_test.head(10).tolist())
+# 4. Feature engineering
+def add_history_features(transactions):
+    """Features computed only from each customer's EARLIER purchases (no future leakage)."""
+    t = transactions.sort_values(["customer_id", "purchase_date"]).copy()
+    grouped = t.groupby("customer_id")
+    t["prior_purchase_count"] = grouped.cumcount()
+    t["prior_avg_purchase_amount"] = grouped["purchase_amount"].transform(lambda x: x.shift(1).expanding().mean())
+    t["prior_avg_customer_rating"] = grouped["customer_rating"].transform(lambda x: x.shift(1).expanding().mean())
+    return t
 
-print("\nPredicted products:")
-print(predictions[:10])
 
-probabilities = model.predict_proba(X_test)
+def build_dataset(save=True):
+    transactions, social = load_clean()
+    merged = add_history_features(transactions).merge(aggregate_social(social), on="customer_id", how="left")
 
-print(probabilities[:5])
+    # Post-merge checks
+    assert len(merged) == len(transactions), "the join changed the number of transactions"
+    assert not merged["transaction_id"].duplicated().any(), "duplicate transactions after the merge"
 
-predictions = model.predict(X_test)
+    if save:
+        merged.to_csv(MERGED_FILE, index=False)
+    return merged
 
-accuracy = accuracy_score(y_test, predictions)
 
-print("Model Accuracy:", accuracy)
-print("Model Accuracy Percentage:", accuracy * 100, "%")
+# 5. Models and evaluation
+def make_pipeline(classifier):
+    preprocess = ColumnTransformer([
+        ("num", Pipeline([("impute", SimpleImputer(strategy="median")), ("scale", StandardScaler())]),
+         NUMERIC_FEATURES),
+        ("cat", Pipeline([("impute", SimpleImputer(strategy="constant", fill_value="Unknown")),
+                          ("encode", OneHotEncoder(handle_unknown="ignore"))]), CATEGORICAL_FEATURES),
+    ])
+    return Pipeline([("preprocess", preprocess), ("classifier", classifier)])
 
-precision = precision_score(
-    y_test,
-    predictions,
-    average="weighted",
-    zero_division=0
-)
 
-recall = recall_score(
-    y_test,
-    predictions,
-    average="weighted",
-    zero_division=0
-)
-
-print("Precision:", precision)
-print("Recall:", recall)
-
-f1 = f1_score(
-    y_test,
-    predictions,
-    average="weighted",
-    zero_division=0
-)
-
-print("F1 Score:", f1)
-
-probabilities = model.predict_proba(X_test)
-
-loss = log_loss(
-    y_test,
-    probabilities,
-    labels=model.classes_
-)
-
-print("Log Loss:", loss)
-
-report = classification_report(
-    y_test,
-    predictions,
-    zero_division=0
-)
-
-print(report)
-
-cm = confusion_matrix(
-    y_test,
-    predictions,
-    labels=model.classes_
-)
-
-plt.figure(figsize=(9, 6))
-
-sns.heatmap(
-    cm,
-    annot=True,
-    fmt="d",
-    cmap="Blues",
-    xticklabels=model.classes_,
-    yticklabels=model.classes_
-)
-
-plt.xlabel("Predicted Product")
-plt.ylabel("Actual Product")
-plt.title("Product Recommendation Confusion Matrix")
-
-plt.tight_layout()
-plt.show()
-
-evaluation_results = {
-    "Accuracy": accuracy,
-    "Precision": precision,
-    "Recall": recall,
-    "F1 Score": f1,
-    "Log Loss": loss
+# Strong regularisation on purpose: with 150 transactions and weak signal (see the EDA notebook),
+# flexible models become overconfident and their log-loss gets worse than random guessing.
+CANDIDATES = {
+    "LogisticRegression": lambda: LogisticRegression(C=0.05, max_iter=5000, class_weight="balanced"),
+    "RandomForest": lambda: RandomForestClassifier(n_estimators=300, min_samples_leaf=10,
+                                                   class_weight="balanced", random_state=SEED),
 }
 
-print("\nMODEL EVALUATION RESULTS")
 
-for metric, value in evaluation_results.items():
-    print(f"{metric}: {value:.4f}")
+def cross_validate(data, make_classifier):
+    """Customer-grouped K-fold: all purchases of a customer stay on the same side of each split."""
+    X, y, groups = data[FEATURES], data[TARGET].astype(str), data["customer_id"]
+    classes = sorted(y.unique())
+    y_true, y_pred, proba = [], [], []
+    for train_idx, test_idx in GroupKFold(n_splits=N_FOLDS).split(X, y, groups):
+        model = make_pipeline(make_classifier()).fit(X.iloc[train_idx], y.iloc[train_idx])
+        p = pd.DataFrame(model.predict_proba(X.iloc[test_idx]), columns=model.classes_)
+        p = p.reindex(columns=classes, fill_value=0.0)
+        y_true += list(y.iloc[test_idx])
+        y_pred += list(model.predict(X.iloc[test_idx]))
+        proba.append(p.to_numpy())
+    proba = np.clip(np.vstack(proba), 1e-15, 1)
+    proba = proba / proba.sum(axis=1, keepdims=True)
+    return {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "f1_macro": f1_score(y_true, y_pred, average="macro", zero_division=0),
+        "f1_weighted": f1_score(y_true, y_pred, average="weighted", zero_division=0),
+        "log_loss": log_loss(y_true, proba, labels=classes),
+    }, y_true, y_pred, classes
 
-with open("evaluation_results.txt", "w") as file:
 
-    file.write("PRODUCT RECOMMENDATION MODEL EVALUATION\n")
+def save_confusion_matrix(y_true, y_pred, classes, title):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import ConfusionMatrixDisplay
 
-    for metric, value in evaluation_results.items():
+    cm = confusion_matrix(y_true, y_pred, labels=classes)
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ConfusionMatrixDisplay(cm, display_labels=classes).plot(cmap="Blues", ax=ax, colorbar=False)
+    ax.set_title(title)
+    ax.set_xlabel("Predicted product")
+    ax.set_ylabel("Actual product")
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
+    fig.tight_layout()
+    fig.savefig(CONFUSION_FILE, dpi=120)
+    plt.close(fig)
 
-        file.write(f"{metric}: {value:.4f}\n")
 
-    file.write("\nCLASSIFICATION REPORT\n")
+def train():
+    data = build_dataset()
+    n_classes = data[TARGET].nunique()
 
-    file.write(report)
-    
-# Save the trained model
+    results = {name: cross_validate(data, make) for name, make in CANDIDATES.items()}
+    best = min(results, key=lambda n: (-results[n][0]["f1_macro"], results[n][0]["log_loss"]))
+    scores, y_true, y_pred, classes = results[best]
+    save_confusion_matrix(y_true, y_pred, classes, f"{best}: {N_FOLDS}-fold customer-grouped CV")
 
-joblib.dump(model, "product_recommendation_model.joblib")
+    final = make_pipeline(CANDIDATES[best]()).fit(data[FEATURES], data[TARGET].astype(str))
+    joblib.dump({"model": final, "features": FEATURES, "classes": list(final.classes_), "name": best}, MODEL_FILE)
 
-print("Model successfully saved!")
+    metrics = {
+        "evaluation": f"{N_FOLDS}-fold GroupKFold by customer ({len(data)} transactions, "
+                      f"{data['customer_id'].nunique()} customers)",
+        "chance_accuracy": round(1 / n_classes, 3),
+        "chance_log_loss": round(float(np.log(n_classes)), 3),
+        "selected_model": best,
+        "models": {n: {k: round(float(v), 3) for k, v in r[0].items()} for n, r in results.items()},
+        "classification_report": classification_report(y_true, y_pred, zero_division=0, output_dict=True),
+    }
+    METRICS_FILE.write_text(json.dumps(metrics, indent=2))
+    return metrics
 
-# Load the saved model
 
-loaded_model = joblib.load(
-    "product_recommendation_model.joblib"
-)
+# 6. Prediction (used by the CLI app)
+_bundle = None
 
-print("Model successfully loaded!")
 
-# Select one customer from the test dataset
+def customer_profile(customer_id, data=None):
+    """Feature row describing a customer's NEXT purchase: their full history so far + social profile."""
+    data = build_dataset(save=False) if data is None else data
+    history = data[data["customer_id"] == int(customer_id)]
+    if history.empty:
+        raise KeyError(f"customer {customer_id} not found in the transactions")
+    row = history.sort_values("purchase_date").iloc[[-1]].copy()
+    row["prior_purchase_count"] = len(history)
+    row["prior_avg_purchase_amount"] = history["purchase_amount"].mean()
+    row["prior_avg_customer_rating"] = history["customer_rating"].mean()
+    return row[FEATURES]
 
-new_customer = X_test.iloc[[0]]
 
-# Predict the product category
+def predict(customer_id, top_k=1):
+    """Recommended product category for a customer (top_k > 1 returns a ranked list with probabilities)."""
+    global _bundle
+    if _bundle is None:
+        if not MODEL_FILE.exists():
+            raise FileNotFoundError(f"{MODEL_FILE.name} not found; run: python product_model.py train")
+        _bundle = joblib.load(MODEL_FILE)
+    model = _bundle["model"]
+    proba = model.predict_proba(customer_profile(customer_id))[0]
+    ranked = sorted(zip(model.classes_, proba), key=lambda x: -x[1])
+    return ranked[0][0] if top_k == 1 else [(c, round(float(p), 3)) for c, p in ranked[:top_k]]
 
-prediction = loaded_model.predict(new_customer)
 
-print("Recommended product:", prediction[0])
-
-probabilities = loaded_model.predict_proba(new_customer)
-
-# Get product categories
-categories = loaded_model.classes_
-
-# Display probabilities
-for category, probability in zip(categories, probabilities[0]):
-
-    print(f"{category}: {probability:.2%}")
-
-best_index = probabilities[0].argmax()
-
-recommended_product = categories[best_index]
-
-print("Best recommendation:", recommended_product)
-
-if os.path.exists("product_recommendation_model.joblib"):
-
-    print("Model file exists!")
-
-    print(
-        "File size:",
-        os.path.getsize("product_recommendation_model.joblib"),
-        "bytes"
-    )
-
-else:
-
-    print("Model file was not found.")
+if __name__ == "__main__":
+    if len(sys.argv) >= 2 and sys.argv[1] == "train":
+        m = train()
+        print(m["evaluation"])
+        print(f"Chance level: accuracy {m['chance_accuracy']}, log-loss {m['chance_log_loss']}")
+        for name, s in m["models"].items():
+            print(f"{name:<20} accuracy {s['accuracy']:.3f} | macro F1 {s['f1_macro']:.3f} | "
+                  f"weighted F1 {s['f1_weighted']:.3f} | log-loss {s['log_loss']:.3f}")
+        print("Selected:", m["selected_model"], "->", MODEL_FILE.name)
+    elif len(sys.argv) == 3 and sys.argv[1] == "predict":
+        for product, p in predict(sys.argv[2], top_k=3):
+            print(f"{product:<12} {p:.0%}")
+    else:
+        print(__doc__)
